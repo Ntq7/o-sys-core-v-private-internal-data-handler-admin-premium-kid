@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>System Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.ibb.co/bj6c8NL8/image.png">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Kanit', sans-serif; 
+            margin: 0; 
+            background-color: #fdfbfb;
+            min-height: 100vh;
+        }
+
+        /* 🌊 ตั้งค่า Canvas ให้อยู่ด้านหลังสุด */
+        #water-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* สไตล์กระจกฝ้า (Glassmorphism) */
+        .glass-container {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px 0 rgba(212, 175, 55, 0.15);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .modal-header-gold { background: linear-gradient(90deg, #fde047, #d97706); height: 8px; width: 100%; position: absolute; top: 0; left: 0; }
+        
+        .select-status { padding: 6px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; outline: none; cursor: pointer; border: 1px solid #e2e8f0; transition: all 0.2s; }
+        .select-status.pass { background-color: #ecfdf5; color: #10b981; border-color: #10b981; }
+        .select-status.fail { background-color: #fef2f2; color: #ef4444; border-color: #ef4444; }
+        
+        @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        .animate-scale { animation: scaleIn 0.2s ease-out; }
+    </style>
+</head>
+<body class="flex flex-col relative overflow-x-hidden">
+
+    <canvas id="water-canvas"></canvas>
+
+    <div id="adminLoginOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[200] p-6">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden animate-scale border border-amber-100">
+            <div class="modal-header-gold"></div>
+            <div class="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl border border-amber-100 shadow-sm">🔐</div>
+            <h3 class="text-xl font-bold text-slate-800 mb-1">System Login</h3>
+            <p class="text-xs text-amber-600 mb-6 font-bold uppercase tracking-wider">Premium-Kids Admin</p>
+            
+            <div class="text-left mb-4">
+                <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Username (ชื่อผู้ใช้)</label>
+                <input id="adminUserInput" type="text" placeholder="พิมพ์ชื่อผู้ใช้" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 mt-1 text-[16px] outline-none focus:border-amber-400 transition-colors">
+            </div>
+
+            <div class="text-left mb-8">
+                <label class="text-xs font-bold text-slate-500 ml-1 uppercase">Password (รหัสผ่าน)</label>
+                <input id="adminPassInput" type="password" placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 mt-1 text-[16px] outline-none focus:border-amber-400 transition-colors">
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="verifyAdmin()" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl py-3.5 font-bold text-sm shadow-md transition-all">เข้าสู่ระบบแผงควบคุม</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-page" class="hidden flex-col p-4 md:p-6 max-w-6xl mx-auto w-full z-10">
+        <div class="glass-container p-6 md:p-8 w-full mt-4 animate-scale">
+            <div class="modal-header-gold"></div>
+            
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 mt-2 gap-4">
+                <div class="flex items-center gap-3">
+                    <img src="https://i.ibb.co/bj6c8NL8/image.png" class="w-12 h-12 rounded-full border-2 border-white shadow-sm">
+                    <h2 class="text-2xl font-bold text-slate-800 drop-shadow-sm">⚙️ แผงควบคุม (Admin)</h2>
+                </div>
+                <div class="flex gap-3 w-full md:w-auto">
+                    <button id="bulkDelBtn" onclick="bulkDelete()" class="hidden flex-1 md:flex-none bg-red-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-red-600 transition-all">🗑️ ลบที่เลือก (<span id="selectedCount">0</span>)</button>
+                    <button onclick="logoutAdmin()" class="flex-1 md:flex-none bg-slate-800 text-white hover:bg-slate-700 font-bold text-sm px-6 py-2.5 rounded-xl shadow-md transition-all">ออกจากระบบ</button>
+                </div>
+            </div>
+            
+            <div class="bg-amber-50/70 p-6 rounded-3xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6 border border-amber-200/50 shadow-sm backdrop-blur-sm">
+                <input id="newShop" type="text" placeholder="ชื่อร้านค้า" class="p-3.5 rounded-xl border border-white outline-none focus:ring-2 focus:ring-amber-300 text-[15px] shadow-sm bg-white/90">
+                <input id="newOwner" type="text" placeholder="ชื่อผู้รับ" class="p-3.5 rounded-xl border border-white outline-none focus:ring-2 focus:ring-amber-300 text-[15px] shadow-sm bg-white/90">
+                <input id="newAddr" type="text" placeholder="ที่อยู่จัดส่ง" class="p-3.5 rounded-xl border border-white outline-none focus:ring-2 focus:ring-amber-300 text-[15px] shadow-sm bg-white/90 lg:col-span-2">
+                <select id="newStatus" class="p-3.5 rounded-xl border border-white outline-none font-bold text-amber-700 text-[15px] shadow-sm bg-white/90">
+                    <option value="ผ่าน">✅ ผ่าน</option>
+                    <option value="ไม่ผ่าน">❌ ไม่ผ่าน</option>
+                </select>
+                <button id="addBtn" onclick="addShop()" class="lg:col-span-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-4 rounded-xl shadow-md transition-all active:scale-[0.98]">บันทึกข้อมูล </button>
+            </div>
+
+            <div class="mb-4">
+                <input id="adminSearchInput" type="text" oninput="render()" placeholder="🔍 ค้นหาร้านค้าหรือชื่อผู้รับในตาราง..." class="w-full p-4 rounded-2xl border border-white bg-white/80 outline-none focus:ring-2 focus:ring-amber-300 transition-all text-[15px] shadow-inner backdrop-blur-sm">
+            </div>
+
+            <div class="max-h-[500px] overflow-y-auto border border-amber-100/50 bg-white/60 rounded-2xl shadow-inner backdrop-blur-md">
+                <table class="w-full text-left border-collapse">
+                    <thead class="sticky top-0 bg-white/95 backdrop-blur-sm z-10 border-b-2 border-amber-100 shadow-sm">
+                        <tr class="text-slate-500 text-sm">
+                            <th class="p-4 w-10"><input type="checkbox" id="selectAll" onclick="toggleAll(this)" class="w-4 h-4 accent-amber-500"></th>
+                            <th class="p-4 font-semibold uppercase tracking-wide">ร้านค้า</th>
+                            <th class="p-4 font-semibold uppercase tracking-wide">ชื่อผู้รับ</th>
+                            <th class="p-4 font-semibold uppercase tracking-wide">สถานะ</th>
+                            <th class="p-4 text-center font-semibold uppercase tracking-wide">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shopTable" class="bg-transparent"></tbody>
+                </table>
+            </div>
+            <div id="loading" class="hidden text-center text-amber-600 mt-6 animate-pulse font-bold text-sm bg-amber-50 py-2 rounded-full w-fit mx-auto px-6 border border-amber-200">⏳ กำลังซิงค์ข้อมูลกับฐานข้อมูล...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, doc, addDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp, orderBy, query } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD9SnhLqRijMJIsNpStmsPSWrXsiFxn-gs",
+            authDomain: "mombaby-check.firebaseapp.com",
+            projectId: "mombaby-check",
+            storageBucket: "mombaby-check.firebasestorage.app",
+            messagingSenderId: "948432082279",
+            appId: "1:948432082279:web:61b1dfd215c02582f6cbc2",
+            measurementId: "G-MX9SD1GC7P"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // --- 🌊 ระบบ Water Canvas Animation ---
+        const canvas = document.getElementById('water-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        let time = 0;
+        function animateWater() {
+            ctx.clearRect(0, 0, width, height);
+            let gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#fdfbfb'); 
+            gradient.addColorStop(1, '#eedea7'); 
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            for (let i = 0; i <= width; i += 10) {
+                let y = height * 0.4 + Math.sin(i * 0.005 + time) * 40 + Math.cos(i * 0.008 + time) * 30;
+                ctx.lineTo(i, y);
+            }
+            ctx.lineTo(width, height);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            for (let i = 0; i <= width; i += 10) {
+                let y = height * 0.6 + Math.sin(i * 0.006 - time * 1.5) * 50 + Math.cos(i * 0.004 - time) * 20;
+                ctx.lineTo(i, y);
+            }
+            ctx.lineTo(width, height);
+            ctx.fill();
+
+            time += 0.015; 
+            requestAnimationFrame(animateWater);
+        }
+        animateWater();
+
+        let globalDb = [];
+
+        // --- Auth System ---
+        window.checkAdminSession = function() {
+            const expiry = localStorage.getItem('premiumKidsAdminSession');
+            if (expiry && Date.now() < parseInt(expiry, 10)) {
+                return true;
+            }
+            localStorage.removeItem('premiumKidsAdminSession');
+            return false;
+        }
+
+        window.initApp = function() {
+            if (window.checkAdminSession()) {
+                document.getElementById('adminLoginOverlay').classList.replace('flex', 'hidden');
+                document.getElementById('admin-page').classList.replace('hidden', 'flex');
+                startRealtimeListener();
+            } else {
+                document.getElementById('adminLoginOverlay').classList.replace('hidden', 'flex');
+                document.getElementById('admin-page').classList.replace('flex', 'hidden');
+            }
+        }
+
+        window.verifyAdmin = function() {
+            const user = document.getElementById('adminUserInput').value.trim();
+            const pass = document.getElementById('adminPassInput').value;
+            
+            if(user === "admin" && pass === "123") { 
+                const expiryTime = Date.now() + (5 * 24 * 60 * 60 * 1000);
+                localStorage.setItem('premiumKidsAdminSession', expiryTime);
+
+                document.getElementById('adminLoginOverlay').classList.replace('flex', 'hidden');
+                document.getElementById('admin-page').classList.replace('hidden', 'flex');
+                startRealtimeListener();
+            } else { 
+                alert("ชื่อผู้ใช้ หรือ รหัสผ่านไม่ถูกต้อง!");
+            }
+        }
+
+        window.logoutAdmin = function() {
+            if(confirm("ต้องการออกจากระบบใช่หรือไม่?")) {
+                localStorage.removeItem('premiumKidsAdminSession');
+                document.getElementById('admin-page').classList.replace('flex', 'hidden');
+                document.getElementById('adminLoginOverlay').classList.replace('hidden', 'flex');
+                document.getElementById('adminUserInput').value = '';
+                document.getElementById('adminPassInput').value = '';
+            }
+        }
+
+        window.initApp(); 
+
+        // --- Data System ---
+        function startRealtimeListener() {
+            document.getElementById('loading').classList.remove('hidden');
+            
+            const q = query(collection(db, "address_mom_baby"), orderBy("timestamp", "desc"));
+            onSnapshot(q, (snapshot) => {
+                globalDb = [];
+                snapshot.forEach((doc) => {
+                    globalDb.push({ id: doc.id, ...doc.data() });
+                });
+                window.render();
+                document.getElementById('loading').classList.add('hidden');
+            }, (error) => {
+                console.error("Firebase Read Error:", error);
+                document.getElementById('loading').classList.add('hidden');
+                
+                onSnapshot(collection(db, "address_mom_baby"), (snapshotFallback) => {
+                    globalDb = [];
+                    snapshotFallback.forEach((doc) => {
+                        globalDb.push({ id: doc.id, ...doc.data() });
+                    });
+                    window.render();
+                });
+            });
+        }
+
+        window.render = function() {
+            const tbody = document.getElementById('shopTable');
+            const searchVal = document.getElementById('adminSearchInput').value.toLowerCase();
+            if (!tbody) return;
+            
+            const filtered = globalDb.filter(s => 
+                (s.Name && String(s.Name).toLowerCase().includes(searchVal)) || 
+                (s.Owner && String(s.Owner).toLowerCase().includes(searchVal))
+            );
+
+            let htmlString = ""; 
+            filtered.forEach((s) => {
+                const sStatus = s.Status || 'รอตรวจสอบ';
+                const statusClass = (sStatus === 'ผ่าน' || sStatus === 'pass') ? 'pass' : 'fail';
+
+                const statusSelect = `
+                    <select onchange="updateStatus('${s.id}', this.value)" class="select-status ${statusClass} bg-white/90">
+                        <option value="ผ่าน" ${(sStatus === 'ผ่าน' || sStatus === 'pass') ? 'selected' : ''}>✅ ผ่าน</option>
+                        <option value="ไม่ผ่าน" ${(sStatus === 'ไม่ผ่าน' || sStatus === 'fail') ? 'selected' : ''}>❌ ไม่ผ่าน</option>
+                    </select>
+                `;
+
+                htmlString += `<tr class="border-b border-amber-100/40 text-sm hover:bg-white/50 transition-colors">
+                    <td class="p-4"><input type="checkbox" class="shop-check w-4 h-4 accent-amber-500" value="${s.id}" onchange="updateBulkUI()"></td>
+                    <td class="p-4 font-bold text-amber-700">${s.Name || '-'}</td>
+                    <td class="p-4 text-slate-700">${s.Owner || '-'}</td>
+                    <td class="p-4">${statusSelect}</td>
+                    <td class="p-4 text-center">
+                        <button onclick="deleteShop('${s.id}', '${s.Name}')" class="text-red-500 font-bold p-2 hover:bg-red-50 hover:scale-110 rounded-lg transition-all">🗑️ ลบ</button>
+                    </td>
+                </tr>`;
+            });
+            
+            tbody.innerHTML = htmlString; 
+            window.updateBulkUI();
+        }
+
+        window.toggleAll = function(master) {
+            document.querySelectorAll('.shop-check').forEach(ck => ck.checked = master.checked);
+            window.updateBulkUI();
+        }
+
+        window.updateBulkUI = function() {
+            const checked = document.querySelectorAll('.shop-check:checked');
+            const btn = document.getElementById('bulkDelBtn');
+            const count = document.getElementById('selectedCount');
+            if(count) count.innerText = checked.length;
+            if(btn) {
+                if(checked.length > 0) btn.classList.remove('hidden');
+                else btn.classList.add('hidden');
+            }
+        }
+
+        window.addShop = async function() {
+            const name = document.getElementById('newShop').value.trim();
+            const owner = document.getElementById('newOwner').value.trim();
+            const addr = document.getElementById('newAddr').value.trim();
+            const status = document.getElementById('newStatus').value; 
+            
+            if(!name || !owner) return alert("กรุณากรอกข้อมูลชื่อร้านและชื่อผู้รับให้ครบถ้วน");
+
+            document.getElementById('addBtn').disabled = true;
+            document.getElementById('loading').classList.remove('hidden');
+
+            try {
+                await addDoc(collection(db, "address_mom_baby"), {
+                    Name: name,
+                    Owner: owner,
+                    Address: addr,
+                    Status: status,
+                    timestamp: serverTimestamp() 
+                });
+
+                document.getElementById('newShop').value = ''; 
+                document.getElementById('newOwner').value = ''; 
+                document.getElementById('newAddr').value = '';
+                alert("เพิ่มข้อมูลร้านค้าสำเร็จ! ☁️");
+            } catch (e) { 
+                console.log(e); 
+                alert("ไม่สามารถเพิ่มข้อมูลได้ กรุณาลองใหม่");
+            } 
+            finally { 
+                document.getElementById('addBtn').disabled = false; 
+                document.getElementById('loading').classList.add('hidden'); 
+            }
+        }
+
+        window.updateStatus = async function(id, newStatus) {
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                await updateDoc(doc(db, "address_mom_baby", id), {
+                    Status: newStatus
+                });
+            } catch (e) { 
+                console.log(e); 
+                alert("ไม่สามารถอัปเดตสถานะได้");
+            }
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        window.deleteShop = async function(id, name) {
+            if(!confirm(`ยืนยันการลบร้าน "${name}"?`)) return;
+            
+            document.getElementById('loading').classList.remove('hidden');
+            try { 
+                await deleteDoc(doc(db, "address_mom_baby", id)); 
+                alert("ลบข้อมูลสำเร็จ! 🗑️");
+            } catch (e) { 
+                console.log(e); 
+                alert("ไม่สามารถลบข้อมูลได้");
+            }
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('selectAll').checked = false;
+        }
+
+        window.bulkDelete = async function() {
+            const checked = document.querySelectorAll('.shop-check:checked');
+            if(!confirm(`ยืนยันการลบ ${checked.length} รายการที่เลือก?`)) return;
+
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                for(let box of checked) {
+                    await deleteDoc(doc(db, "address_mom_baby", box.value));
+                }
+                alert(`ลบ ${checked.length} รายการสำเร็จ! 🗑️`);
+            } catch (e) { 
+                console.log(e); 
+                alert("ระบบลบข้อมูลบางส่วนไม่สำเร็จ");
+            } 
+            finally { 
+                document.getElementById('loading').classList.add('hidden'); 
+                document.getElementById('selectAll').checked = false;
+                window.updateBulkUI();
+            }
+        }
+    </script>
+</body>
+</html>
